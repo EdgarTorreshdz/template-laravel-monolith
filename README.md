@@ -1,58 +1,104 @@
-<p align="center"><a href="https://laravel.com" target="_blank"><img src="https://raw.githubusercontent.com/laravel/art/master/logo-lockup/5%20SVG/2%20CMYK/1%20Full%20Color/laravel-logolockup-cmyk-red.svg" width="400" alt="Laravel Logo"></a></p>
+# template-laravel-monolith
 
-<p align="center">
-<a href="https://github.com/laravel/framework/actions"><img src="https://github.com/laravel/framework/workflows/tests/badge.svg" alt="Build Status"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/dt/laravel/framework" alt="Total Downloads"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/v/laravel/framework" alt="Latest Stable Version"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/l/laravel/framework" alt="License"></a>
-</p>
+[![CI](https://github.com/EdgarTorreshdz/template-laravel-monolith/actions/workflows/ci.yml/badge.svg)](https://github.com/EdgarTorreshdz/template-laravel-monolith/actions/workflows/ci.yml)
 
-## About Laravel
+Template base para proyectos que **no** necesitan un frontend separado: Laravel + Blade +
+[Livewire](https://livewire.laravel.com)/[Volt](https://livewire.laravel.com/docs/volt) + Alpine,
+todo en un solo repo, un solo deploy, sesiones de Laravel de toda la vida (sin API JSON, sin
+Sanctum, sin CORS). Ver [`astro-template`](../astro-template) +
+[`template-laravel-api`](../template-laravel-api) si el proyecto sí necesita frontend y backend
+separados (varios consumidores, equipos distintos, etc.) — la mayoría de proyectos de un solo
+sitio con panel admin no lo necesitan, y este template existe para esos casos.
 
-Laravel is a web application framework with expressive, elegant syntax. We believe development must be an enjoyable and creative experience to be truly fulfilling. Laravel takes the pain out of development by easing common tasks used in many web projects, such as:
+## Por qué un monolito en vez de API + frontend separados
 
-- [Simple, fast routing engine](https://laravel.com/docs/routing).
-- [Powerful dependency injection container](https://laravel.com/docs/container).
-- Multiple back-ends for [session](https://laravel.com/docs/session) and [cache](https://laravel.com/docs/cache) storage.
-- Expressive, intuitive [database ORM](https://laravel.com/docs/eloquent).
-- Database agnostic [schema migrations](https://laravel.com/docs/migrations).
-- [Robust background job processing](https://laravel.com/docs/queues).
-- [Real-time event broadcasting](https://laravel.com/docs/broadcasting).
+Construimos primero el otro patrón (`astro-template` + `template-laravel-api`, ver
+[`torres-shop`](https://github.com/EdgarTorreshdz/torres-shop) como ejemplo) y varios de los bugs
+reales que encontramos ahí son **síntomas directos de la separación**, no de la lógica de negocio:
+mismatch de puerto entre los dos servidores de dev, CORS, un guard de Sanctum (`sanctum`) que no
+coincidía con el guard bajo el que se sembraron los permisos (`web`), validación duplicada
+(reglas en el controller Y en el JS del formulario), SEO que requiere `prerender = false`
+página por página en vez de venir gratis por defecto. Todo eso desaparece con un monolito:
 
-Laravel is accessible, powerful, and provides tools required for large, robust applications.
+- Sesiones de Laravel (`auth`/`guest` middleware) en vez de tokens Bearer + `localStorage`.
+- Un solo guard (`web`) — no hay un segundo guard con el que un rol/permiso pueda desalinearse.
+- HTML renderizado en el servidor por defecto — SEO no requiere ningún truco especial.
+- Un solo repo, un solo `.env`, un solo deploy.
 
-## Learning Laravel
+## Requisitos
 
-Laravel has the most extensive and thorough [documentation](https://laravel.com/docs) and video tutorial library of all modern web application frameworks, making it a breeze to get started with the framework.
+- PHP 8.3+, Composer, Node 20+
+- **SQL Server** + los drivers de Microsoft para PHP (`sqlsrv` y `pdo_sqlsrv`) — ver la sección
+  de instalación en el README de [`template-laravel-api`](../template-laravel-api) para el
+  detalle completo, es el mismo requisito.
 
-In addition, [Laracasts](https://laracasts.com) contains thousands of video tutorials on a range of topics including Laravel, modern PHP, unit testing, and JavaScript. Boost your skills by digging into our comprehensive video library.
-
-You can also watch bite-sized lessons with real-world projects on [Laravel Learn](https://laravel.com/learn), where you will be guided through building a Laravel application from scratch while learning PHP fundamentals.
-
-## Agentic Development
-
-Laravel's predictable structure and conventions make it ideal for AI coding agents like Claude Code, Cursor, and GitHub Copilot. Install [Laravel Boost](https://laravel.com/docs/ai) to supercharge your AI workflow:
+## Setup por proyecto nuevo
 
 ```bash
-composer require laravel/boost --dev
-
-php artisan boost:install
+composer install
+cp .env.example .env
+php artisan key:generate
+npm install
+npm run build
 ```
 
-Boost provides your agent 15+ tools and skills that help agents build Laravel applications while following best practices.
+Editar en `.env` las credenciales reales de SQL Server (`DB_HOST`, `DB_DATABASE`,
+`DB_USERNAME`, `DB_PASSWORD`) — o dejar `DB_USERNAME`/`DB_PASSWORD` **completamente ausentes**
+para autenticación de Windows contra una instancia local (ver "Conexión local con Windows Auth"
+abajo).
 
-## Contributing
+```bash
+php artisan migrate --seed
+php artisan serve
+npm run dev   # en otra terminal, para hot-reload de Blade/CSS/JS mientras desarrollas
+```
 
-Thank you for considering contributing to the Laravel framework! The contribution guide can be found in the [Laravel documentation](https://laravel.com/docs/contributions).
+### Conexión local con Windows Auth (sin login SQL)
 
-## Code of Conduct
+```env
+DB_CONNECTION=sqlsrv
+DB_HOST=(local)\SQLEXPRESS
+DB_PORT=
+DB_DATABASE=laravel
+DB_ENCRYPT=yes
+DB_TRUST_SERVER_CERTIFICATE=true
+```
 
-In order to ensure that the Laravel community is welcoming to all, please review and abide by the [Code of Conduct](https://laravel.com/docs/contributions#code-of-conduct).
+- `DB_HOST` usa el nombre de instancia, no una IP con puerto; `DB_PORT` debe quedar **vacío**.
+- `DB_USERNAME`/`DB_PASSWORD` deben quedar **completamente ausentes** del `.env` (ni siquiera
+  `DB_USERNAME=` vacío) — así es como `pdo_sqlsrv` decide usar Windows Integrated Authentication
+  en vez de intentar un login SQL. `config/database.php` ya está preparado para esto (sin
+  fallback a `root`/`''`).
+- La base debe existir de antemano: `sqlcmd -S "(local)\SQLEXPRESS" -E -Q "CREATE DATABASE laravel"`.
 
-## Security Vulnerabilities
+## Qué trae de fábrica
 
-If you discover a security vulnerability within Laravel, please send an e-mail to Taylor Otwell via [taylor@laravel.com](mailto:taylor@laravel.com). All security vulnerabilities will be promptly addressed.
+- **Auth completa** vía [Laravel Breeze (stack Livewire)](https://laravel.com/docs/starter-kits#breeze-and-livewire):
+  registro, login, "olvidé mi contraseña", verificación de email, perfil (nombre/email/password,
+  eliminar cuenta) — todo Blade + Volt, sin una sola línea de JS de más.
+- **Roles y permisos** vía [spatie/laravel-permission](https://spatie.be/docs/laravel-permission):
+  `App\Models\User` ya trae el trait `HasRoles`, los middleware `role`/`permission`/
+  `role_or_permission` ya están registrados en `bootstrap/app.php` (no vienen de fábrica en
+  Laravel 11+, hay que darlos de alta a mano tras instalar el paquete — ya está hecho aquí).
+- **Un solo guard.** A diferencia de la API+Sanctum (`web` para seeders/consola vs. `sanctum`
+  dentro de una request autenticada), aquí solo existe `web` — no hay una segunda superficie con
+  la que un rol/permiso pueda desalinearse por accidente.
+- **`DatabaseSeeder` sin `WithoutModelEvents`** a propósito: ese trait (que Laravel incluye por
+  defecto en el stub) rompe el cache de permisos de Spatie, que se invalida escuchando el evento
+  `saved` de `Role`/`Permission`. Con el trait activo, los roles se crean en la base pero el
+  cache nunca se entera — el porqué está documentado directamente en el archivo.
+- **Un panel admin de referencia** (`/admin/usuarios`, protegido con middleware `role:admin`,
+  componente Volt en
+  [`resources/views/livewire/admin/users-index.blade.php`](resources/views/livewire/admin/users-index.blade.php)):
+  búsqueda + paginación usando `Livewire\WithPagination` — nativo, sin escribir una clase de
+  tabla en JS ni una API JSON aparte. Proyectos concretos reemplazan/extienden este único ejemplo
+  con sus propias secciones (productos, pedidos, lo que el proyecto necesite), siguiendo el mismo
+  patrón: middleware `role:`/`permission:` en la ruta, componente Volt, listo.
 
-## License
+## Tests
 
-The Laravel framework is open-sourced software licensed under the [MIT license](https://opensource.org/licenses/MIT).
+`php artisan test` — corre contra sqlite en memoria (ver `phpunit.xml`), no necesita el driver
+`sqlsrv` ni una instancia real de SQL Server. Incluye `AdminAccessTest` como referencia de cómo
+probar una sección protegida por rol: un invitado es redirigido a `/login`, un usuario sin el rol
+`admin` recibe 403, un admin ve la lista y la búsqueda filtra correctamente (probado directo
+sobre el componente Volt con `Livewire\Volt\Volt::test()`, sin necesidad de un navegador real).
